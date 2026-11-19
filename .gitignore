@@ -1,0 +1,9 @@
+.venv/
+kokoro-onnx/
+node_modules/
+four-color-video/out/
+*.mp4
+*.wav
+check_*.png
+tmp_*
+__pycache__/
