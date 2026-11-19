@@ -150,11 +150,16 @@ export const FILL_END = 3.8;
 export const FILL_DUR = 0.35;
 
 // Paint the supersampled map for time ti (seconds) into an ImageData
-export const paintMap = (img: ImageData, ti: number) => {
+export const paintMap = (
+  img: ImageData,
+  ti: number,
+  fillStart = FILL_START,
+  fillEnd = FILL_END,
+) => {
   const { n, lab, border, col, order } = getMap();
   const lut = new Uint8ClampedArray(n * 3);
   order.forEach((r, k) => {
-    const start = FILL_START + ((FILL_END - FILL_START) * k) / n;
+    const start = fillStart + ((fillEnd - fillStart) * k) / n;
     const a = smoothstep((ti - start) / FILL_DUR);
     for (let ch = 0; ch < 3; ch++) lut[r * 3 + ch] = GREY[ch] * (1 - a) + PAL[col[r]][ch] * a;
   });

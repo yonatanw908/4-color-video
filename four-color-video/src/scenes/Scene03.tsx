@@ -44,9 +44,12 @@ const clampProgress = (
     easing: EASE,
   });
 
+export const SCENE03_FRAMES = 252; // 8.40s (speech ends 7.97s; final 0.40s hands off to Scene 4)
+const EXIT_START = SCENE03_FRAMES - 12;
+
 // Stage center & organic polar contours for 3 inner countries meeting in a Y + 4th wrapping around all 3
 const CX = 640;
-const CY = 362;
+const CY = 358;
 
 const rInner = (theta: number) =>
   122 + 7 * Math.sin(3 * theta + 0.4) + 4 * Math.sin(5 * theta - 1.1);
@@ -115,10 +118,6 @@ const buildInnerSector = (
   return toPath([...s0, ...arc, ...s1], true);
 };
 
-// Inner regions:
-// 0: Top (coral), -150° to -30°
-// 1: Bottom-Left (yellow), +90° to +210°
-// 2: Bottom-Right (teal), -30° to +90°
 const INNER_REGIONS = [
   {
     colorIdx: 0, // coral
@@ -151,7 +150,6 @@ const buildOuterWrapPath = (wrapProgress: number) => {
   const innerPts = arcPoints(rInner, startAngle, startAngle + sweep, steps);
 
   if (wrapProgress >= 0.999) {
-    // Seamless closed ring using evenodd fill rule
     const fill = `${toPath(outerPts, true)} ${toPath(innerPts, true)}`;
     return { fill, innerBorder: toPath(innerPts, true) };
   }
@@ -164,17 +162,16 @@ const WRAP_START = 2.15;
 const WRAP_DUR = 1.45;
 
 const TRIES = [
-  { regionIdx: 0, colorIdx: 0, start: 4.1 }, // tries coral -> clashes with Top
-  { regionIdx: 1, colorIdx: 1, start: 5.1 }, // tries yellow -> clashes with Bottom-Left
-  { regionIdx: 2, colorIdx: 2, start: 6.1 }, // tries teal -> clashes with Bottom-Right
+  { regionIdx: 0, colorIdx: 0, start: 4.1 },
+  { regionIdx: 1, colorIdx: 1, start: 5.1 },
+  { regionIdx: 2, colorIdx: 2, start: 6.1 },
 ] as const;
 const TRY_DUR = 0.95;
 
 const SETTLE_START = 7.25;
-const SETTLE_DUR = 0.35;
+const SETTLE_DUR = 0.4;
 
 const computeOuterState = (ti: number) => {
-  // After settling on blue
   if (ti >= SETTLE_START) {
     const p = interpolate(ti, [SETTLE_START, SETTLE_START + SETTLE_DUR], [0, 1], {
       extrapolateLeft: "clamp",
@@ -184,7 +181,6 @@ const computeOuterState = (ti: number) => {
     return { fill: lerpRgb(GREY, PAL[3], p), clashIdx: -1, clashAlpha: 0 };
   }
 
-  // During one of the three failed tries
   for (const t of TRIES) {
     const local = ti - t.start;
     if (local >= 0 && local < TRY_DUR) {
@@ -198,7 +194,6 @@ const computeOuterState = (ti: number) => {
       }
       if (local < 0.78) {
         const u = (local - 0.33) / 0.45;
-        // Sharp flash to magenta with a slight double pulse
         const flash =
           Math.sin(Math.min(1, u / 0.22) * (Math.PI / 2)) *
           (0.72 + 0.28 * Math.sin(u * Math.PI * 3));
@@ -223,7 +218,23 @@ const FourRegionsMap: React.FC = () => {
   const { fps } = useVideoConfig();
   const ti = frame / fps;
 
-  const baseIn = clampProgress(frame, 0, 0.45, fps);
+  // Enter smoothly from Scene 2's pie, gently breathe, then align into Scene 4's 4-country map
+  const enterScale = interpolate(frame, [0, 12], [0.88, 1], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+    easing: EASE,
+  });
+  const drift = interpolate(frame, [12, SCENE03_FRAMES], [0, 0.02], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
+  const exitRot = interpolate(frame, [EXIT_START, SCENE03_FRAMES], [0, 8], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+    easing: EASE,
+  });
+  const scale = enterScale + drift;
+
   const wrapP = clampProgress(frame, WRAP_START, WRAP_DUR, fps);
   const outer = buildOuterWrapPath(wrapP);
   const { fill: outerFill, clashIdx, clashAlpha } = computeOuterState(ti);
@@ -234,16 +245,15 @@ const FourRegionsMap: React.FC = () => {
       style={{
         position: "absolute",
         inset: 0,
-        opacity: baseIn,
+        transform: `scale(${scale.toFixed(4)}) rotate(${exitRot.toFixed(2)}deg)`,
+        transformOrigin: `${CX}px ${CY}px`,
       }}
     >
       <svg width={1280} height={720} style={{ display: "block" }}>
-        {/* 4th outer wrapping region */}
         {outer.fill && (
           <path d={outer.fill} fill={outerFill} fillRule="evenodd" />
         )}
 
-        {/* 3 inner regions meeting in a Y */}
         {INNER_REGIONS.map((reg, i) => {
           const p = clampProgress(frame, reg.fillStart, 0.35, fps);
           return (
@@ -255,7 +265,6 @@ const FourRegionsMap: React.FC = () => {
           );
         })}
 
-        {/* Dark BG borders: Y spokes + shared boundary with outer region */}
         {SPOKE_PATHS.map((d, i) => (
           <path
             key={i}
@@ -278,7 +287,6 @@ const FourRegionsMap: React.FC = () => {
           />
         )}
 
-        {/* Magenta clash highlight along the colliding shared border */}
         {clashIdx >= 0 && clashAlpha > 0.01 && (
           <>
             <path
@@ -314,13 +322,33 @@ const FourRegionsMap: React.FC = () => {
 
 const Title: React.FC = () => {
   const frame = useCurrentFrame();
-  const { fps } = useVideoConfig();
+  const fadeIn = interpolate(frame, [6, 13], [0, 1], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+    easing: EASE,
+  });
+  const fadeOut = interpolate(frame, [EXIT_START, EXIT_START + 6], [1, 0], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+    easing: EASE,
+  });
+  const dy =
+    interpolate(frame, [6, 13], [10, 0], {
+      extrapolateLeft: "clamp",
+      extrapolateRight: "clamp",
+      easing: EASE,
+    }) +
+    interpolate(frame, [EXIT_START, EXIT_START + 6], [0, -10], {
+      extrapolateLeft: "clamp",
+      extrapolateRight: "clamp",
+      easing: EASE,
+    });
   return (
     <Interactive.Div
       name="Title"
       style={{
         position: "absolute",
-        top: 82,
+        top: 82 + dy,
         width: "100%",
         translate: "0px -50%",
         textAlign: "center",
@@ -329,7 +357,7 @@ const Title: React.FC = () => {
         fontSize: 62,
         letterSpacing: -1,
         color: "rgb(240,242,248)",
-        opacity: clampProgress(frame, 0, 0.5, fps),
+        opacity: fadeIn * fadeOut,
       }}
     >
       Why Not Three?
@@ -341,8 +369,8 @@ const CounterCaption: React.FC = () => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
 
-  const rowIn = clampProgress(frame, 0.5, 0.5, fps);
-  const fourIn = clampProgress(frame, SETTLE_START, 0.45, fps);
+  const rowIn = clampProgress(frame, 0.45, 0.45, fps);
+  const fourIn = clampProgress(frame, SETTLE_START, 0.5, fps);
 
   return (
     <Interactive.Div
@@ -379,7 +407,6 @@ const CounterCaption: React.FC = () => {
             />
           );
         })}
-        {/* 4th blue swatch smoothly expands in when blue settles */}
         <div
           style={{
             width: 28 * fourIn,
@@ -412,11 +439,21 @@ const CounterCaption: React.FC = () => {
   );
 };
 
-export const SCENE03_FRAMES = 272; // 8.30s beat-synced narration + ~0.77s breathing room
-
 export const Scene03: React.FC = () => {
+  const frame = useCurrentFrame();
+  const enterOpacity = interpolate(frame, [0, 12], [0, 1], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+    easing: EASE,
+  });
+  const exitOpacity = interpolate(frame, [EXIT_START, SCENE03_FRAMES], [1, 0], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+    easing: EASE,
+  });
+
   return (
-    <AbsoluteFill style={{ backgroundColor: rgb(BG) }}>
+    <AbsoluteFill style={{ opacity: enterOpacity * exitOpacity }}>
       <Audio src={staticFile("audio/scene03.wav")} />
       <FourRegionsMap />
       <Title />

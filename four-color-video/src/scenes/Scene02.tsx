@@ -31,15 +31,24 @@ const lerpRgb = (
   )},${Math.round(a[2] + (b[2] - a[2]) * c)})`;
 };
 
-const clampProgress = (frame: number, startSec: number, durSec: number, fps: number) =>
+const clampProgress = (
+  frame: number,
+  startSec: number,
+  durSec: number,
+  fps: number,
+) =>
   interpolate(frame, [startSec * fps, (startSec + durSec) * fps], [0, 1], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
     easing: EASE,
   });
 
-// Cut between Part 1 (shared border) and Part 2 (pie) during the 2.60s–3.05s pause
-const CUT_SEC = 2.9;
+export const SCENE02_FRAMES = 171; // 5.70s (speech ends 5.19s; final 0.40s hands off to Scene 3)
+const EXIT_START = SCENE02_FRAMES - 12;
+
+// Smooth cross-morph between Part 1 (shared border) and Part 2 (pie) during the 2.60s–3.05s pause
+const MORPH_START = 2.68;
+const MORPH_DUR = 0.34;
 
 // Part 1 geometry: two wobbly regions sharing a vertical border inside a rounded map frame
 const BOX_W = 620;
@@ -54,10 +63,7 @@ const buildSharedBorder = () => {
   const yEnd = BOX_Y + BOX_H + 12;
   for (let y = yStart; y <= yEnd; y += 4) {
     const dy = y - BOX_Y;
-    const x =
-      640 +
-      18 * Math.sin(dy / 48) +
-      9 * Math.sin(dy / 19 + 1.1);
+    const x = 640 + 18 * Math.sin(dy / 48) + 9 * Math.sin(dy / 19 + 1.1);
     pts.push([x, y]);
   }
   const line = pts
@@ -75,16 +81,28 @@ const TwoRegions: React.FC = () => {
   const { fps } = useVideoConfig();
   const ti = frame / fps;
 
-  const fadeIn = clampProgress(frame, 0, 0.45, fps);
+  const morphOut = clampProgress(frame, MORPH_START, MORPH_DUR, fps);
+  if (morphOut >= 1) return null;
+
+  const enterScale = interpolate(frame, [0, 0.4 * fps], [0.92, 1], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+    easing: EASE,
+  });
+  const drift = interpolate(ti, [0.4, MORPH_START], [0, 0.025], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
+  const scale = enterScale + drift - morphOut * 0.08;
+
   const leftFill = clampProgress(frame, 1.35, 0.35, fps);
   const rightFill = clampProgress(frame, 1.75, 0.35, fps);
 
   // Two smooth pulses along the shared border during "that share a border"
-  const pulseWindow =
-    interpolate(ti, [0.55, 0.75, 1.85, 2.15], [0, 1, 1, 0], {
-      extrapolateLeft: "clamp",
-      extrapolateRight: "clamp",
-    });
+  const pulseWindow = interpolate(ti, [0.55, 0.75, 1.85, 2.15], [0, 1, 1, 0], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
   const pulseWave = 0.5 - 0.5 * Math.cos(((ti - 0.55) / 0.75) * Math.PI * 2);
   const pulse = pulseWindow * (0.25 + 0.75 * pulseWave);
 
@@ -94,7 +112,9 @@ const TwoRegions: React.FC = () => {
       style={{
         position: "absolute",
         inset: 0,
-        opacity: fadeIn,
+        opacity: 1 - morphOut,
+        transform: `scale(${scale.toFixed(4)})`,
+        transformOrigin: "640px 365px",
       }}
     >
       <svg width={1280} height={720} style={{ display: "block" }}>
@@ -169,20 +189,26 @@ const PieWedges: React.FC = () => {
   const { fps } = useVideoConfig();
   const ti = frame / fps;
 
-  // Center dot appears right as "just one point" is spoken (~3.6s)
+  const morphIn = clampProgress(frame, MORPH_START + 0.06, MORPH_DUR, fps);
+  if (morphIn <= 0.001) return null;
+
+  const exitP = interpolate(frame, [EXIT_START, SCENE02_FRAMES], [0, 1], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+    easing: EASE,
+  });
+
+  // Gentle continuous rotation + scale handoff into Scene 3's centered cluster
+  const rotDeg = interpolate(ti, [MORPH_START, SCENE02_FRAMES / fps], [-6, 8], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
+  const scale = 0.92 + morphIn * 0.08 - exitP * 0.12;
+
   const dotAppear = clampProgress(frame, 3.45, 0.35, fps);
 
-  // Two expanding ripple rings around the central meeting point
-  const ring1 = interpolate(ti, [3.7, 4.55], [0, 1], {
-    extrapolateLeft: "clamp",
-    extrapolateRight: "clamp",
-    easing: EASE,
-  });
-  const ring2 = interpolate(ti, [4.55, 5.4], [0, 1], {
-    extrapolateLeft: "clamp",
-    extrapolateRight: "clamp",
-    easing: EASE,
-  });
+  // Continuous expanding ripples around the central meeting point through the end of the scene
+  const ringStarts = [3.65, 4.35, 5.05];
 
   return (
     <Interactive.Div
@@ -190,6 +216,9 @@ const PieWedges: React.FC = () => {
       style={{
         position: "absolute",
         inset: 0,
+        opacity: morphIn,
+        transform: `scale(${scale.toFixed(4)})`,
+        transformOrigin: `${PIE_CX}px ${PIE_CY}px`,
       }}
     >
       <svg width={1280} height={720} style={{ display: "block" }}>
@@ -198,9 +227,13 @@ const PieWedges: React.FC = () => {
             <circle cx={PIE_CX} cy={PIE_CY} r={PIE_R} />
           </clipPath>
         </defs>
-        <g clipPath="url(#scene02-pie-clip)">
+        <g
+          clipPath="url(#scene02-pie-clip)"
+          transform={`rotate(${rotDeg.toFixed(2)} ${PIE_CX} ${PIE_CY})`}
+        >
           {WEDGE_PATHS.map((d, i) => {
-            const fillP = clampProgress(frame, 3.0 + i * 0.08, 0.35, fps);
+            // Slower radial sweep paced right across "Touching at just one point doesn't count"
+            const fillP = clampProgress(frame, 2.98 + i * 0.19, 0.35, fps);
             const targetColor = i % 2 === 0 ? PAL[0] : PAL[2];
             return (
               <path key={i} d={d} fill={lerpRgb(GREY, targetColor, fillP)} />
@@ -219,31 +252,27 @@ const PieWedges: React.FC = () => {
           ))}
         </g>
 
-        {/* Expanding rings highlighting the single shared vertex */}
-        {ring1 > 0 && ring1 < 1 && (
-          <circle
-            cx={PIE_CX}
-            cy={PIE_CY}
-            r={12 + ring1 * 34}
-            fill="none"
-            stroke="rgb(240,242,248)"
-            strokeWidth={3}
-            opacity={(1 - ring1) * 0.85}
-          />
-        )}
-        {ring2 > 0 && ring2 < 1 && (
-          <circle
-            cx={PIE_CX}
-            cy={PIE_CY}
-            r={12 + ring2 * 34}
-            fill="none"
-            stroke="rgb(240,242,248)"
-            strokeWidth={3}
-            opacity={(1 - ring2) * 0.85}
-          />
-        )}
+        {ringStarts.map((rs, idx) => {
+          const rP = interpolate(ti, [rs, rs + 0.85], [0, 1], {
+            extrapolateLeft: "clamp",
+            extrapolateRight: "clamp",
+            easing: EASE,
+          });
+          if (rP <= 0 || rP >= 1) return null;
+          return (
+            <circle
+              key={idx}
+              cx={PIE_CX}
+              cy={PIE_CY}
+              r={12 + rP * 36}
+              fill="none"
+              stroke="rgb(240,242,248)"
+              strokeWidth={3}
+              opacity={(1 - rP) * 0.85}
+            />
+          );
+        })}
 
-        {/* Central point marker */}
         {dotAppear > 0.001 && (
           <g opacity={dotAppear}>
             <circle
@@ -270,13 +299,33 @@ const PieWedges: React.FC = () => {
 
 const Title: React.FC = () => {
   const frame = useCurrentFrame();
-  const { fps } = useVideoConfig();
+  const fadeIn = interpolate(frame, [6, 13], [0, 1], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+    easing: EASE,
+  });
+  const fadeOut = interpolate(frame, [EXIT_START, EXIT_START + 6], [1, 0], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+    easing: EASE,
+  });
+  const dy =
+    interpolate(frame, [6, 13], [10, 0], {
+      extrapolateLeft: "clamp",
+      extrapolateRight: "clamp",
+      easing: EASE,
+    }) +
+    interpolate(frame, [EXIT_START, EXIT_START + 6], [0, -10], {
+      extrapolateLeft: "clamp",
+      extrapolateRight: "clamp",
+      easing: EASE,
+    });
   return (
     <Interactive.Div
       name="Title"
       style={{
         position: "absolute",
-        top: 82,
+        top: 82 + dy,
         width: "100%",
         translate: "0px -50%",
         textAlign: "center",
@@ -285,7 +334,7 @@ const Title: React.FC = () => {
         fontSize: 62,
         letterSpacing: -1,
         color: "rgb(240,242,248)",
-        opacity: clampProgress(frame, 0, 0.5, fps),
+        opacity: fadeIn * fadeOut,
       }}
     >
       The Rules
@@ -297,8 +346,8 @@ const Caption: React.FC = () => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
 
-  const line1In = clampProgress(frame, 0.5, 0.5, fps);
-  const line2In = clampProgress(frame, 3.1, 0.5, fps);
+  const line1In = clampProgress(frame, 0.45, 0.45, fps);
+  const line2In = clampProgress(frame, 3.05, 0.45, fps);
   const line1Opacity = line1In * (1 - 0.35 * line2In);
 
   return (
@@ -329,17 +378,24 @@ const Caption: React.FC = () => {
   );
 };
 
-export const SCENE02_FRAMES = 188; // 5.46s narration + ~0.8s breathing room
-
 export const Scene02: React.FC = () => {
   const frame = useCurrentFrame();
-  const { fps } = useVideoConfig();
-  const showPie = frame >= Math.round(CUT_SEC * fps);
+  const enterOpacity = interpolate(frame, [0, 12], [0, 1], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+    easing: EASE,
+  });
+  const exitOpacity = interpolate(frame, [EXIT_START, SCENE02_FRAMES], [1, 0], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+    easing: EASE,
+  });
 
   return (
-    <AbsoluteFill style={{ backgroundColor: rgb(BG) }}>
+    <AbsoluteFill style={{ opacity: enterOpacity * exitOpacity }}>
       <Audio src={staticFile("audio/scene02.wav")} />
-      {showPie ? <PieWedges /> : <TwoRegions />}
+      <TwoRegions />
+      <PieWedges />
       <Title />
       <Caption />
     </AbsoluteFill>
