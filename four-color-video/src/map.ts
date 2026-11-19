@@ -40,6 +40,9 @@ export type MapData = {
   col: number[]; // color index per region
   adj: Set<number>[];
   order: number[]; // reveal order
+  seeds: [number, number][]; // 1x map-local seed points
+  screenSeeds: [number, number][]; // 1x full-frame screen coordinates
+  edges: [number, number][]; // unique undirected adjacency pairs [a, b] with a < b
 };
 
 const build = (): MapData => {
@@ -133,7 +136,18 @@ const build = (): MapData => {
   const order = [...Array(n).keys()].sort(
     (a, b) => seeds[a][0] + 0.3 * seeds[a][1] - (seeds[b][0] + 0.3 * seeds[b][1]),
   );
-  return { n, lab, border, col, adj, order };
+
+  // 1x coordinates for graph scenes (Scenes 6 & 7)
+  const seeds1x: [number, number][] = seeds.map(([sx, sy]) => [sx / S, sy / S]);
+  const screenSeeds: [number, number][] = seeds1x.map(([sx, sy]) => [MX + sx, MY + sy]);
+  const edges: [number, number][] = [];
+  for (let a = 0; a < n; a++) {
+    for (const b of adj[a]) {
+      if (a < b) edges.push([a, b]);
+    }
+  }
+
+  return { n, lab, border, col, adj, order, seeds: seeds1x, screenSeeds, edges };
 };
 
 let cache: MapData | null = null;
