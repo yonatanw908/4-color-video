@@ -1,5 +1,7 @@
 import { Composition } from "remotion";
-import { FourColorTheorem } from "./Composition";
+import { FourColorTheorem, SCENES, TOTAL_FRAMES } from "./Composition";
+
+const VIDEO = { fps: 30, width: 1280, height: 720 } as const;
 
 export const RemotionRoot: React.FC = () => {
   return (
@@ -7,11 +9,19 @@ export const RemotionRoot: React.FC = () => {
       <Composition
         id="FourColorTheorem"
         component={FourColorTheorem}
-        durationInFrames={150}
-        fps={30}
-        width={1280}
-        height={720}
+        durationInFrames={TOTAL_FRAMES}
+        {...VIDEO}
       />
+      {/* Each scene on its own, for previewing one scene at a time */}
+      {SCENES.map(({ id, component, frames }) => (
+        <Composition
+          key={id}
+          id={id}
+          component={component}
+          durationInFrames={frames}
+          {...VIDEO}
+        />
+      ))}
     </>
   );
 };

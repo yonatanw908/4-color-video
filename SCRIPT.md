@@ -5,7 +5,7 @@ Target length is about 2.5 minutes, with about 340 words of narration at roughly
 ## Style
 - 1280×720, 30 fps. Background `BG` rgb(15,18,28), uncolored regions `GREY` rgb(58,64,82).
 - Palette (`PAL` in `map.ts`): coral, yellow, teal, blue. Magenta rgb(214,92,214) is used only to show a clash.
-- Inter 700 for titles and Inter 500 for captions. The voice is kokoro `af_sarah` at speed 1.0.
+- Inter 700 for titles and Inter 500 for captions. The voice is kokoro `af_bella` at speed 1.0.
 - TTS rules: numbers are spelled out and there are no symbols. Each scene's narration renders to its own wav.
 
 ## Workflow
@@ -72,7 +72,7 @@ Target length is about 2.5 minutes, with about 340 words of narration at roughly
 > No human could check it by hand. Later the proof was simplified, and in two thousand five it was fully verified.
 
 ## 11. Close (2:26–2:36)
-**Visual:** A bigger map (a 9×5 grid of regions) colors itself in the same sweep. The swatches return, the caption reads `Four colors suffice.`, and the screen fades out.
+**Visual:** A much more complex map than Scene 1's: roughly 40 to 50 regions, generated in code, which is far less regular than the grid used in Scene 1. Region sizes vary a lot, from big countries next to tiny ones. Some regions sit fully inside others, as enclaves or rings that wrap around a whole country. Shapes vary much more too: long thin strips, spirals or hooks, jagged coastlines, and smooth blobs. The map colors itself in the same sweep. The swatches return, the caption reads `Four colors suffice.`, and the screen fades out.
 **Narration:**
 > However tangled the borders, four colors are always enough.
 
